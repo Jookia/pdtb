@@ -24,10 +24,6 @@
 */
 
 TcpSocket *sock;
-uint8_t lineBuffer[8] = {0};
-uint8_t *linePos = lineBuffer;
-#define LINE_END (lineBuffer + sizeof(lineBuffer))
-#define LINE_LEN (linePos - lineBuffer)
 
 /* user customziable stuff */
 int setupSocket(void) {
@@ -48,70 +44,51 @@ void cleanupSocket(void) {
 	fclose(TrcStream);
 }
 
-void sendLine(void) {
-	TcpBuffer *buf = TcpBuffer::getXmitBuf();
-	if(buf != NULL) {
-		/* check if maxData or whatever is going to fit this */
-		uint8_t *data = (uint8_t*)buf + sizeof(TcpBuffer);
-		memcpy(data, lineBuffer, LINE_LEN);
-		buf->dataLen = LINE_LEN + 1;
-		data[LINE_LEN] = '\0';
-		fprintf(stdout, "OUTGOING %s\n", data);
-		sock->enqueue(buf);
+uint8_t* recvPacket = (uint8_t*)0;
+
+extern "C" {
+
+int recvNewPacket(void) {
+    if(recvPacket != 0) {
+        Buffer_free(recvPacket);
+    }
+    while((recvPacket = (uint8_t*)sock->incoming.dequeue()) == 0) {
+        sleep(1); // DEBUG
+        printf("getting new packets...\n");
+	    if(bioskey(1) && bioskey(0) == (45 << 8)) {
+		    fprintf(stdout, "Alt-X hit, quitting\n");
+		    return 0;
+	    }
+        PACKET_PROCESS_SINGLE;
+	    Arp::driveArp();
+	    Tcp::drivePackets();
+	    if(sock->isRemoteClosed() != 0) {
+		    fprintf(stdout, "Remote closed, quitting\n");
+	    	return 0;
+	    }
 	}
+	IpHeader *ip = (IpHeader*)(recvPacket + sizeof(EthHeader));
+	TcpHeader *tcp = (TcpHeader*)(ip->payloadPtr());
+	uint8_t *userData = ((uint8_t*)tcp) + tcp->getTcpHlen();
+	uint16_t len = ip->payloadLen() - tcp->getTcpHlen();
+    printf("new packet len %i\n", len);
+	return len;
 }
 
-void handleLine(void) {
-	/* bot code goes here using lineBuffer */
-	if(lineBuffer[0] == '!') {
-		sendLine();
-	}
+uint8_t* currentRecvPacket(void) {
+	IpHeader *ip = (IpHeader*)(recvPacket + sizeof(EthHeader));
+	TcpHeader *tcp = (TcpHeader*)(ip->payloadPtr());
+	uint8_t *userData = ((uint8_t*)tcp) + tcp->getTcpHlen();
+    return userData;
 }
 
-int appendLineBuffer(uint8_t in) {
-	if(LINE_END <= linePos) {
-		if(LINE_END == linePos) {
-			fprintf(stderr, "Dropping long line\n");
-		}
-		if(in == '\n') {
-			linePos = lineBuffer;
-		}
-		return 1;
-	}
-	if(in == '\n') {
-		*linePos = '\0';
-		handleLine();
-		linePos = lineBuffer;
-	} else {
-		*linePos++ = in;
-	}
-	return 0;
+int sendNewPacket(uint8_t* packet, int len) {
+    printf("pkt is '%s', len %i\n", packet, len);
+    return 0;
 }
+    
+extern int asmRun(void);
 
-int processPackets(void) {
-	uint8_t *packet;
-	PACKET_PROCESS_SINGLE;
-	Arp::driveArp();
-	Tcp::drivePackets();
-	if(sock->isRemoteClosed() != 0) {
-		fprintf(stdout, "Remote has closed, quitting\n");
-		return 0;
-	}
-	if(bioskey(1) && bioskey(0) == (45 << 8)) {
-		fprintf(stdout, "Alt-X hit, quitting\n");
-		return 0;
-	}
-	while((packet = (uint8_t*)sock->incoming.dequeue()) != 0) {
-		IpHeader *ip = (IpHeader*)(packet + sizeof(EthHeader));
-		TcpHeader *tcp = (TcpHeader*)(ip->payloadPtr());
-		uint8_t *userData = ((uint8_t*)tcp) + tcp->getTcpHlen();
-		uint16_t len = ip->payloadLen() - tcp->getTcpHlen();
-		uint8_t *pos = userData;
-		uint8_t *after = userData + len;
-		for(; pos != after; appendLineBuffer(*pos++));
-		Buffer_free(packet);
-	}
-	return 1;
 }
 
 int main(void) {
@@ -121,7 +98,7 @@ int main(void) {
 		cleanupSocket();
 		return 1;
 	}
-	while(processPackets());
+	rc = asmRun();
 	cleanupSocket();
-	return 0;
+	return rc;
 }

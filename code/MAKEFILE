@@ -2,12 +2,12 @@ tcp_h_dir = .\TCPINC\
 tcp_c_dir = .\TCPLIB\
 
 memory_model = -ms
-compile_options = $(memory_model) -wx -0 -zq -DCFG_H="mtcp.cfg" -d1 -os -oa -d1 -zmf
+compile_options = $(memory_model) -wx -0 -zq -DCFG_H="mtcp.cfg" -d1 -os -oa -zmf
 compile_options += -i=$(tcp_h_dir)
 
 #tcpobjs = packet.obj arp.obj eth.obj ip.obj tcp.obj tcpsockm.obj udp.obj utils.obj dns.obj timer.obj ipasm.obj
 tcpobjs = packet.obj arp.obj eth.obj ip.obj tcp.obj utils.obj tcpsockm.obj timer.obj ipasm.obj
-objs = bot.obj
+objs = bot.obj hello.obj
 
 all : bot.com
 
@@ -28,6 +28,9 @@ clean : .symbolic
 
 .cpp.obj :
   wpp $[* $(compile_options)
+
+hello.obj : hello.asm
+  nasm -f obj hello.asm -o hello.obj
 
 bot.com: $(tcpobjs) $(objs)
   wlink debug all system com option map, eliminate, symfile, quiet name $@ file *.obj
