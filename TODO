@@ -1,4 +1,4 @@
-- DNS support for irc.twitch.tv
+- fix ignore-me
 - reconnect support
 - better oauth management?
 

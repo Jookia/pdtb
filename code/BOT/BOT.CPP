@@ -12,6 +12,7 @@
 #include "arp.h"
 #include "tcp.h"
 #include "tcpsockm.h"
+#include "dns.h"
 
 TcpSocket *sock = (TcpSocket*)0;
 uint8_t* recvPacket = (uint8_t*)0;
@@ -83,8 +84,31 @@ int setupSocket(void) {
   uint16_t dstPort;
   int err = getEnvironmentDetails(addr, &dstPort);
   if(err) {
-    logPrintf("setupSocket: Unable to read BOT_HOST, rc %i", rc);
-    return 0;
+    if(err != 1) {
+      logPrintf("setupSocket: Unable to read BOT_HOST, rc %i", rc);
+      return 2;
+    }
+    dstPort = 6667;
+    rc = Dns::resolve("irc.twitch.tv", addr, 1);
+    if(rc < 0) {
+      logPrintf("setupSocket: Unable to resolve irc.twitch.tv, rc %i", rc);
+      return 3;
+    }
+    while(Dns::isQueryPending() != 0) {
+      PACKET_PROCESS_SINGLE;
+      Arp::driveArp();
+      Dns::drivePendingQuery();
+      if(_bios_keybrd(1) && _bios_keybrd(0) == (45 << 8)) {
+        logPrintf("recvNewPacket: Alt-X hit, quitting");
+        return 4;
+      }
+    }
+    rc = Dns::getQueryRc();
+    if(rc) {
+      logPrintf("setupSocket: DNS query failed, rc %i", rc);
+      return 5;
+    }
+    Dns::resolve("irc.twitch.tv", addr, 1);
   }
   logPrintf("Host details: %i.%i.%i.%i:%i", 
     addr[0], addr[1], addr[2], addr[3], dstPort);
@@ -116,6 +140,7 @@ int recvNewPacket(void) {
     PACKET_PROCESS_SINGLE;
     Arp::driveArp();
     Tcp::drivePackets();
+    Dns::drivePendingQuery();
     if(sock->isRemoteClosed() != 0) {
       logPrintf("recvNewPacket: Remote closed, quitting");
       return 0;
