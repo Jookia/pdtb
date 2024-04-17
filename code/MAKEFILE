@@ -1,5 +1,5 @@
 tcpobjs = ARP.OBJ ETH.OBJ ETHTYPE.OBJ IPASM.OBJ IP.OBJ IPTYPE.OBJ PACKET.OBJ TCP.OBJ TCPSOCKM.OBJ TIMER.OBJ TRACE.OBJ UTILS.OBJ
-botobjs = bot.obj state.obj logic.obj log.obj parse.obj
+botobjs = bot.obj state.obj logic.obj log.obj parse.obj string.obj
 testioobjs = testio.obj
 testparsobjs = testpars.obj parse.obj
 teststrobjs = teststr.obj string.obj

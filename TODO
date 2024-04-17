@@ -1,25 +1,22 @@
-string builder library
-- replace snprintf
-- copying instructions
+watchdog?
 
-push_str
-in: si bx
-write_char ax
-write_str di cx ; strcpy
-write_num ax ;
-pop_str
-; check if buffer full
+user data SEGMENT
 
-printFormatIncoming: db "INCOMING %i: %.*s",0x00
-printFormatOutgoing: db "OUTGOING %i: %.*s",0x00
-timeFormat: db "%.4u-%.2u-%.2uT%.2u:%.2u:%.2u",0x00
+user data (128 bytes max):
+- display name (64 bytes)
+- user id (16 bytes)
+- bytes (2 bytes)
 
-; timeout if 001 is not reached in 5 seconds
-; only send QUIT if we're in idlestate or some shit
-; clear auth buffer
+INCOMING @badge-info=;badges=broadcaster/1;client-nonce=1b4ee6df72c6cc69367a5975e2df812b;color=;display-name=jookia2;emotes=;first-msg=0;flags=;id=8e79753f-c742-4805-bc49-295897c1f5d5;mod=0;returning-chatter=0;room-id=247027364;subscriber=0;tmi-sent-ts=1671319789114;turbo=0;user-id=247027364;user-type= :jookia2!jookia2@jookia2.tmi.twitch.tv PRIVMSG #jookia2 :what's up
+- if PRIVMSG begins with >, DOS command parser:
+- lowercase it first
 
-command to quit?
+>CMDNAME ARG1 ARG2 ARG3...
 
-CAP REQ :twitch.tv/commands
+>HELP
+>BYTES
+>GAMBLE
+>SEND 100 hilary
 
-once we have pings done, merge test.py with some test commands
+>HELP
+"I am a DOS bot"

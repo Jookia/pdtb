@@ -10,9 +10,9 @@ section _TEXT
 ; - ah,al: input/output regs
 ; - bp: scratch register
 ; - bx: len left in read buffer
-; - cx: len left in write buffer
+; - cx: len left in write buffer <- PRESERVE ACROSS CALLS
 ; - si: read buffer
-; - di: write buffer
+; - di: write buffer <- PRESERVE ACROSS CALLS
 ; error checking: check that cx isn't full after writing
 
 ; writes a single character

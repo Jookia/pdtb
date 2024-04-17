@@ -28,8 +28,10 @@ sendPacket:
     pop es
     ret
 .continue:
+    push di
     mov di, ax
     rep movsb
+    pop di
     call sendNewBuffer_
     pop es
     ret
@@ -47,10 +49,10 @@ asmRun_:
     push di
     push si
 ; ax, bx, cx = scratch
-; si = packetBuffer
-; bx = packetBufferLen
-; di = lineBuffer
-; dx = lineBufferLen
+; si = packetBuffer pos
+; bx = amount left in packet buffer
+; di = lineBuffer pos
+; dx = amount left in line buffer
 stateStart:
     call dispatchInit
     cmp ax, 0
@@ -95,11 +97,6 @@ stateSkipLine:
     repne scasb
     xchg di, si
     mov bx, cx
-    cmp cx, 0
-    jz stateGetPacket
-    mov di, lineBuffer
-    mov dx, lineBufferLen
-    jmp stateAppendLine
 stateDispatch:
     mov di, lineBuffer
     mov cx, lineBufferLen

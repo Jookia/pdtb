@@ -59,6 +59,7 @@ def read_line(conn, attempts=4):
 def send_line(conn, line):
     buf = line.encode('utf-8') + b'\r\n'
     length = conn.send(buf)
+    print("OUT %i: %s " % (len(buf), buf))
     if len(buf) != length:
         raise Exception("Unable to send line")
 
@@ -95,6 +96,7 @@ def send_motd(conn, user):
         "001   " + user + "  :Welcome to the test server!",
         "002   " + user + "  :Your host is testserver",
         "003   " + user + "  :Created in 2000",
+        "004   " + user + "  :You are authed",
         "375   " + user + "  :Dear test bot,",
         "372   " + user + "  :I hope you have a lovely day.",
         "376   " + user + "  :Yours, spaghetti man.",
@@ -102,6 +104,18 @@ def send_motd(conn, user):
     for line in motds:
         send_line(conn, ":testserver    " + line)
         #time.sleep(0.01)
+
+# Reads the correct start commands
+def get_start_commands(conn):
+    response = read_irc_command(conn)
+    assert(response[0]=="CAP")
+    assert(response[1]=="REQ")
+    assert(response[2]==":twitch.tv/membership")
+    assert(response[3]=="twitch.tv/tags")
+    assert(response[4]=="twitch.tv/commands")
+    response = read_irc_command(conn)
+    assert(response[0]=="JOIN")
+    assert(response[1]=="#jookia2")
 
 # Sends a ping and expects a pong
 def test_ping(conn):
@@ -111,18 +125,37 @@ def test_ping(conn):
     assert(response[1]==":testserver")
     assert(response[2]=="hello_world")
 
+# Sends a very long message
+def test_long_message(conn):
+    send_line(conn, "PING :testserver " + ("a" * 512))
+
+# Sends a >HELLO and expects "HELLO THERE"
+def test_hello(conn):
+    send_line(conn, "PRIVMSG #testserver >HELLO")
+    response = read_irc_command(conn)
+    assert(response[0]=="PRIVMSG")
+    assert(response[1]=="#testserver")
+    assert(response[2]==":HELLO")
+    assert(response[3]=="THERE")
+
 # Simulates our fake IRC server
 def fake_irc_server(conn):
     print("Testing login...")
     user = require_login(conn)
     print("Sending MOTD...")
     send_motd(conn, user)
+    print("Testing start commands...")
+    get_start_commands(conn)
     print("Testing ping 1...")
     test_ping(conn)
     print("Testing ping 2...")
     test_ping(conn)
+    print("Testing long message...")
+    test_long_message(conn)
     print("Testing ping 3...")
     test_ping(conn)
+    print("Testing >HELLO...")
+    test_hello(conn)
     print("All done!")
 
 # Code to run to set up and run single-process IRC

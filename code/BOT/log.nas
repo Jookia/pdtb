@@ -4,15 +4,13 @@ section DATA class=DATA group=DGROUP
 section _BSS class=BSS group=DGROUP
 GROUP DGROUP CONST2 DATA _BSS
 
-extern snprintf_ ; int sprintf(char *str, size_t size, const char *format, ...)
 extern getenv_ ; char* getenv(char *name);
 
 extern writeNum
 extern writeChar
+extern writeStr
 
 section _TEXT
-
-; TODO: move logPrintf back to C
 
 ; int openLog(void)
 global openLog_
@@ -71,23 +69,6 @@ closeLog_:
     pop bp
     ret
 
-; int printf(const char *format, ...)
-global logPrintf_
-logPrintf_:
-    pop ax
-    mov [printfRet], ax
-    mov [printfCx], cx
-    mov [printfSi], si
-    push logBufferLen
-    push logBuffer
-    call snprintfNice
-    add sp, 4
-    mov si, ax
-    call logGeneral
-    mov cx, [printfCx]
-    mov si, [printfSi]
-    jmp [printfRet]
-
 ; ax = line
 ; cx = len
 writeLog:
@@ -106,129 +87,59 @@ writeLog:
     pop ax
     ret
 
-writeSpace:
-    push ax
-    push cx
-    push 0x20
-    mov ax, sp
-    mov cx, 1
-    call writeLog
-    add sp, 2
-    pop cx
-    pop ax
-    ret
-
-; arguments on stack according to snprintf
-; returns ax = buffer
-; returns cx = safe count
-snprintfNice:
-    pop cx ; ret
-    call snprintf_
-    push ds
-    pop es
-    push cx
-    push bp
-    mov bp, sp
-    mov cx, ax
-    cmp cx, 0
-    jg .didWrite
-    mov cx, 0
-    jmp .noTruncate
-.didWrite:
-    mov ax, [bp+6]  ; snprintf length
-    cmp cx, ax
-    jl .noTruncate
-    mov cx, ax
-.noTruncate: 
-    mov ax, [bp+4] ; snprintf buffer
-    pop bp
-    ret
-
+; ax = tag
+; bx = tag len
 ; si = line
 ; cx = length
 ; returns nothing
 global logGeneral
 logGeneral:
     push ax
+    push si
     push bx
-    push dx
     push cx
-    call createTimestamp
-    call writeLog
-    call writeSpace
-    pop cx
-    mov ax, si
-    call writeLog
-    pop dx
-    pop bx
-    pop ax
-    ret
-
-; si = line
-; cx = length
-; returns nothing
-global logIncoming
-logIncoming:
-    push ax
-    push cx
-    push bp
-    mov bp, sp
-    push cx
-    call createTimestamp
-    call writeLog
-    call writeSpace
-    pop cx
-    push si
-    push cx
-    push cx
-    push printFormatIncoming
-    push logBufferLen
-    push logBuffer
-    call snprintfNice
-    call writeLog
-    mov sp, bp
-    pop bp
-    pop cx
-    pop ax
-    ret
-
-; si = line
-; cx = length
-; returns nothing
-global logOutgoing
-logOutgoing:
-    push ax
-    push cx
-    push bp
-    mov bp, sp
-    push cx
-    call createTimestamp
-    call writeLog
-    call writeSpace
-    pop cx
-    push si
-    push cx
-    push cx
-    push printFormatOutgoing
-    push logBufferLen
-    push logBuffer
-    call snprintfNice
-    call writeLog
-    mov sp, bp
-    pop bp
-    pop cx
-    pop ax
-    ret
-
-; returns time in ax, cx
-createTimestamp:
-    push si
     push di
+    push si
+    push cx
+    push ax
     push bx
-    push dx
+    mov di, logBuffer
+    mov cx, logBufferLen
+    call createTimestamp
+    mov ax, 0x20 ; SPACE
+    call writeChar
+    pop bx
+    pop si
+    call writeStr
+    mov ax, 0x20 ; SPACE
+    call writeChar
+    pop bx
+    pop si
+    call writeStr
+    mov ax, 0x0D ; CARRIAGE RETURn
+    call writeChar
+    mov ax, 0x0A ; NEW LINE
+    call writeChar
+    xchg cx, bx
+    mov cx, logBufferLen
+    sub cx, bx
+    mov ax, logBuffer
+    call writeLog
+    pop di
+    pop cx
+    pop bx
+    pop si
+    pop ax
+    ret
+
+; input/output: cx/di
+createTimestamp:
     push bp
     mov bp, sp
-    sub sp, 12
+    sub sp, 16
+    ; save output string
+    mov [bp-14], di
+    mov [bp-16], cx
     ; get time
     mov ax, 0x2C00
     int 0x21
@@ -248,9 +159,10 @@ createTimestamp:
     mov al, dh
     mov [bp-10], ax ; month
     mov [bp-12], cx ; year
-    mov di, timeBuffer
-    mov cx, timeBufferLen
     mov bx, 4
+    ; load output string
+    mov di, [bp-14]
+    mov cx, [bp-16]
     ; write year
     mov ax, [bp-12]
     call writeNum
@@ -284,34 +196,17 @@ createTimestamp:
     mov bx, 2
     mov ax, [bp-2]
     call writeNum
-    mov ax, cx
-    mov cx, timeBufferLen
-    sub cx, ax
-    mov ax, timeBuffer
     mov sp, bp
     pop bp
-    pop dx
-    pop bx
-    pop di
-    pop si
     ret
 
 section CONST2
 
-printFormatIncoming: db "INCOMING %i: %.*s",0x00
-printFormatOutgoing: db "OUTGOING %i: %.*s",0x00
 botlogEnv: db "BOT_LOG",0x00
 
 section _BSS
 
 logHandle: resb 2
 
-timeBuffer: resb 20
-timeBufferLen equ $ - timeBuffer
-
 logBuffer: resb 512
 logBufferLen equ $ - logBuffer
-
-printfRet: resb 2
-printfCx: resb 2
-printfSi: resb 2

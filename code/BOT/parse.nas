@@ -10,9 +10,9 @@ section _TEXT
 ; - ah,al: input/output regs
 ; - bp: scratch register
 ; - bx: len left in read buffer
-; - cx: len left in write buffer
+; - cx: len left in write buffer <- PRESERVE ACROSS CALLS
 ; - si: read buffer
-; - di: write buffer
+; - di: write buffer <- PRESERVE ACROSS CALLS
 ; - cf: whether we 'failed'
 ; low level char:
 ;   peek: read char to ax, no si increment, check parse len

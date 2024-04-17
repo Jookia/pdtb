@@ -1,10 +1,10 @@
 #include <bios.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <stdarg.h>
 #include <fcntl.h>
 #include "types.h"
 #include "utils.h"
@@ -17,10 +17,22 @@ TcpSocket *sock = (TcpSocket*)0;
 uint8_t* recvPacket = (uint8_t*)0;
 TcpBuffer* sendBuffer = (TcpBuffer*)0;
 
-extern "C" int logPrintf(const char *format, ...);
+#pragma aux logGeneral "logGeneral"
+#pragma aux doLogGeneral = "call logGeneral" parm [ax] [bx] [si] [cx]
+
 extern "C" int asmRun();
 extern "C" int openLog();
 extern "C" int closeLog();
+
+void logPrintf(const char *format, ...) {
+  va_list args;
+  char buffer[512];
+  va_start(args, format);
+  int len = vsnprintf(buffer, sizeof(buffer), format, args);
+  va_end(args);
+  char wrapper[] = "WRAPPER";
+  doLogGeneral(wrapper, sizeof(wrapper) - 1, buffer, len);
+}
 
 void __interrupt __far handler_ctrlbrk(void) {
 }
@@ -54,27 +66,27 @@ int getEnvironmentDetails(IpAddr_t addr, uint16_t *dstPort) {
 int setupSocket(void) {
   int rc = Utils::parseEnv();
   if(rc) {
-    logPrintf("setupSocket: parseEnv failed, rc %i\r\n", rc);
+    logPrintf("setupSocket: parseEnv failed, rc %i", rc);
     return rc;
   }
   rc = Utils::initStack(1, TCP_SOCKET_RING_SIZE, handler_ctrlbrk, handler_ctrlc);
   if(rc) {
-    logPrintf("setupSocket: initStack failed, rc %i\r\n", rc);
+    logPrintf("setupSocket: initStack failed, rc %i", rc);
     return rc;
   }
   sock = TcpSocketMgr::getSocket();
   if(!sock) {
-    logPrintf("setupSocket: getSocket failed, rc %i\r\n", rc);
+    logPrintf("setupSocket: getSocket failed, rc %i", rc);
     return 1;
   }
   IpAddr_t addr;
   uint16_t dstPort;
   int err = getEnvironmentDetails(addr, &dstPort);
   if(err) {
-    logPrintf("setupSocket: Unable to read BOT_HOST, rc %i\r\n", rc);
+    logPrintf("setupSocket: Unable to read BOT_HOST, rc %i", rc);
     return 0;
   }
-  logPrintf("Host details: %i.%i.%i.%i:%i\r\n", 
+  logPrintf("Host details: %i.%i.%i.%i:%i", 
     addr[0], addr[1], addr[2], addr[3], dstPort);
   uint16_t srcPort = rand() + 1024;
   int timeout = 1000; /* milliseconds */
@@ -105,11 +117,11 @@ int recvNewPacket(void) {
     Arp::driveArp();
     Tcp::drivePackets();
     if(sock->isRemoteClosed() != 0) {
-      logPrintf("recvNewPacket: Remote closed, quitting\r\n");
+      logPrintf("recvNewPacket: Remote closed, quitting");
       return 0;
     }
     if(bioskey(1) && bioskey(0) == (45 << 8)) {
-      logPrintf("recvNewPacket: Alt-X hit, quitting\r\n");
+      logPrintf("recvNewPacket: Alt-X hit, quitting");
       return -1;
     }
   }
@@ -117,7 +129,7 @@ int recvNewPacket(void) {
   TcpHeader *tcp = (TcpHeader*)(ip->payloadPtr());
   uint8_t *userData = ((uint8_t*)tcp) + tcp->getTcpHlen();
   uint16_t len = ip->payloadLen() - tcp->getTcpHlen();
-  logPrintf("recvNewPacket: New packet, len %i\r\n", len);
+  logPrintf("recvNewPacket: New packet, len %i", len);
   return len;
 }
 
@@ -125,7 +137,7 @@ uint8_t* currentSendBuffer(int len) {
   int max_len = TcpSocketMgr::MSS_to_advertise;
   /* TODO: check if sendBuffer is NUL */
   if(len > max_len) {
-    logPrintf("sendNewBuffer: Packet too big, %i > %i\r\n", len, max_len);
+    logPrintf("sendNewBuffer: Packet too big, %i > %i", len, max_len);
     return 0;
   }
   uint8_t* userData = ((uint8_t*)sendBuffer + sizeof(TcpBuffer));
@@ -135,7 +147,7 @@ uint8_t* currentSendBuffer(int len) {
 int sendNewBuffer(uint8_t* buffer, int len) {
   int max_len = TcpSocketMgr::MSS_to_advertise;
   if(len > max_len) {
-    logPrintf("sendNewBuffer: Packet too big, %i > %i\r\n", len, max_len);
+    logPrintf("sendNewBuffer: Packet too big, %i > %i", len, max_len);
     return 2;
   }
   TcpBuffer* buf = (TcpBuffer*)((uint8_t*)buffer - sizeof(TcpBuffer));
@@ -145,19 +157,19 @@ int sendNewBuffer(uint8_t* buffer, int len) {
   sendBuffer = TcpBuffer::getXmitBuf();
   switch(ret) {
     case TCP_RC_GOOD:
-      logPrintf("sendNewBuffer: Sent packet, len %i\r\n", len);
+      logPrintf("sendNewBuffer: Sent packet, len %i", len);
       PACKET_PROCESS_SINGLE;
       Arp::driveArp();
       Tcp::drivePackets();
       return 0;
     case TCP_RC_BAD:
-      logPrintf("sendNewBuffer: Error TCP_RC_BAD\r\n");
+      logPrintf("sendNewBuffer: Error TCP_RC_BAD");
       return 1;
     case -2:
-      logPrintf("sendNewBuffer: Too big\r\n");
+      logPrintf("sendNewBuffer: Too big");
       return 2;
     default:
-      logPrintf("sendNewBuffer: Unknown error\r\n");
+      logPrintf("sendNewBuffer: Unknown error");
       return 3;
   }
 }
@@ -172,14 +184,14 @@ int main(void) {
   }
   if(rc = setupSocket()) {
     cleanupSocket();
-    logPrintf("main: Unable to connect to host (rc %i)\r\n", rc);
+    logPrintf("main: Unable to connect to host (rc %i)", rc);
     closeLog();
     return 1;
   }
   sendBuffer = TcpBuffer::getXmitBuf();
-  logPrintf("main: Assembly starting\r\n");
+  logPrintf("main: Assembly starting");
   rc = asmRun();
-  logPrintf("main: Assembly done (rc %i), cleaning up\r\n", rc);
+  logPrintf("main: Assembly done (rc %i), cleaning up", rc);
   cleanupSocket();
   closeLog();
   return rc;
