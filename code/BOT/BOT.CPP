@@ -38,7 +38,7 @@ int setupSocket(void) {
 	sock = TcpSocketMgr::getSocket();
 	IpAddr_t serverAddr = { 10, 0, 2, 2 };
 	uint16_t srcPort = rand() + 1024;
-	uint16_t dstPort = 6667;
+	uint16_t dstPort = 666;
 	int timeout = 500; /* milliseconds */
 	return sock->connect(srcPort, serverAddr, dstPort, timeout);
 }
@@ -66,11 +66,8 @@ void sendLine(void) {
 	}
 }
 
-extern "C" void donothing(void);
-
 void handleLine(void) {
 	/* bot code goes here using lineBuffer */
-	donothing();
 	sendLine();
 }
 

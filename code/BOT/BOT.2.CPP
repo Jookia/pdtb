@@ -24,6 +24,8 @@
 */
 
 TcpSocket *sock;
+uint8_t* recvPacket = (uint8_t*)0;
+TcpBuffer* sendBuffer = (TcpBuffer*)0; /* sizeof(TcpBuffer)+TcpSocketMgr::MSS_to_advertise */
 
 /* user customziable stuff */
 int setupSocket(void) {
@@ -38,13 +40,12 @@ int setupSocket(void) {
 }
 
 void cleanupSocket(void) {
+    printf("cleaning up socket...\n");
 	sock->close();
 	TcpSocketMgr::freeSocket(sock);
 	Utils::endStack();
 	fclose(TrcStream);
 }
-
-uint8_t* recvPacket = (uint8_t*)0;
 
 extern "C" {
 
@@ -82,9 +83,44 @@ uint8_t* currentRecvPacket(void) {
     return userData;
 }
 
-int sendNewPacket(uint8_t* packet, int len) {
-    printf("pkt is '%s', len %i\n", packet, len);
-    return 0;
+uint8_t* currentSendBuffer(int len) {
+    int max_len = TcpSocketMgr::MSS_to_advertise;
+    if(len > max_len) {
+        printf("currentSendBuffer: too big\n");
+        return 0;
+    }
+    printf("currentSendBuffer: size %i\n", len);
+    uint8_t* userData = ((uint8_t*)sendBuffer + sizeof(TcpBuffer));
+    return userData;
+}
+
+int sendNewBuffer(uint8_t* buffer, int len) {
+    int max_len = TcpSocketMgr::MSS_to_advertise;
+    if(len > max_len) {
+        printf("sendBuffer: too big\n");
+        return 2;
+    }
+    TcpBuffer* buf = (TcpBuffer*)((uint8_t*)buffer - sizeof(TcpBuffer));
+	buf->dataLen = len;
+	int ret = sock->enqueue(buf);
+    sendBuffer = TcpBuffer::getXmitBuf();
+	switch(ret) {
+	    case TCP_RC_GOOD:
+            printf("sendBuffer: sent\n");
+            PACKET_PROCESS_SINGLE;
+	        Arp::driveArp();
+	        Tcp::drivePackets();
+	        return 0;
+	    case TCP_RC_BAD:
+            printf("sendBuffer: bad\n");
+	        return 1;
+	    case -2:
+            printf("sendBuffer: too big 2\n");
+	        return 2;
+	    default:
+            printf("sendBuffer: wtf\n");
+	        return 3;
+    }
 }
     
 extern int asmRun(void);
@@ -98,6 +134,7 @@ int main(void) {
 		cleanupSocket();
 		return 1;
 	}
+    sendBuffer = TcpBuffer::getXmitBuf();
 	rc = asmRun();
 	cleanupSocket();
 	return rc;

@@ -102,7 +102,7 @@ void Tcp::dumpStats( FILE *stream ) {
 
 // TcpBuffer static vars
 //
-uint8_t bigBuf[1224 + 8];
+uint8_t bigBuf[2 * (sizeof(TcpBuffer) + (MAX_TCP_SIZE))];
 TcpBuffer *TcpBuffer::xmitBuffers[TCP_MAX_XMIT_BUFS];
 uint8_t    TcpBuffer::freeXmitBuffers;          // Number of buffers in the list
 uint8_t    TcpBuffer::allocatedXmitBuffers;     // Total number of buffers allocated

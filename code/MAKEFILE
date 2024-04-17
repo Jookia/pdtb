@@ -1,36 +1,37 @@
-tcp_h_dir = .\TCPINC\
-tcp_c_dir = .\TCPLIB\
-
-memory_model = -ms
-compile_options = $(memory_model) -wx -0 -zq -DCFG_H="mtcp.cfg" -d1 -os -oa -zmf
-compile_options += -i=$(tcp_h_dir)
-
 #tcpobjs = packet.obj arp.obj eth.obj ip.obj tcp.obj tcpsockm.obj udp.obj utils.obj dns.obj timer.obj ipasm.obj
 tcpobjs = packet.obj arp.obj eth.obj ip.obj tcp.obj utils.obj tcpsockm.obj timer.obj ipasm.obj
-objs = bot.obj hello.obj
+botobjs = bot.obj # hello.obj
+testobjs = testio.obj
 
-all : bot.com
+all : bot.com test.com
 
 clean : .symbolic
-  @del bot.com
-  @del trace.txt
+  @del /q obj\tcplib
+  @del /q obj\test
+  @del /q obj\bot
+  @del /q obj
+  @del *.com
+  @del *.exe
   @del *.sym
-  @del *.obj
-  @del *.err
   @del *.map
 
-.asm : $(tcp_c_dir)
+.asm : tcplib;test;bot;
 
-.cpp : $(tcp_c_dir)
+.cpp : tcplib;test;bot;
 
-.asm.obj :
-  wasm -0 $(memory_model) $[*
+.obj : obj\tcplib;obj\test\;obj\bot;
+
+.asm.obj : 
+  wasm -0 -ms $[* -fo=obj\$[*.obj -fr=obj\$[&.err
 
 .cpp.obj :
-  wpp $[* $(compile_options)
+  wpp $[* -fc=ppargs -fo=obj\$[*.obj -fr=obj\$[&.err
 
-hello.obj : hello.asm
-  nasm -f obj hello.asm -o hello.obj
+hello.obj : bot\hello.asm
+  nasm -f obj bot\hello.asm -o obj\bot\hello.obj
 
-bot.com: $(tcpobjs) $(objs)
-  wlink debug all system com option map, eliminate, symfile, quiet name $@ file *.obj
+bot.com: $(tcpobjs) $(botobjs)
+  wlink name $@ file obj\tcplib\*.obj,obj\bot\*.obj
+
+test.com: $(tcpobjs) $(testobjs)
+  wlink name $@ file obj\tcplib\*.obj,obj\test\*.obj

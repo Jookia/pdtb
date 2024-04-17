@@ -1,0 +1,4 @@
+@%watcom%\binw\wlsystem.lnk
+option map, eliminate, symfile, quiet
+debug all
+system dos
