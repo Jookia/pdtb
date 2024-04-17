@@ -52,7 +52,7 @@ int processPackets(void) {
 		fprintf(stdout, "Remote has closed, quitting\n");
 		return 0;
 	}
-	if(bioskey(1) && bioskey(0) == (45 << 8)) {
+	if(_bios_keybrd(1) && _bios_keybrd(0) == (45 << 8)) {
 		fprintf(stdout, "Alt-X hit, quitting\n");
 		return 0;
 	}

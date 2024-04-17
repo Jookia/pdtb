@@ -120,7 +120,7 @@ int recvNewPacket(void) {
       logPrintf("recvNewPacket: Remote closed, quitting");
       return 0;
     }
-    if(bioskey(1) && bioskey(0) == (45 << 8)) {
+    if(_bios_keybrd(1) && _bios_keybrd(0) == (45 << 8)) {
       logPrintf("recvNewPacket: Alt-X hit, quitting");
       return -1;
     }
