@@ -1,4 +1,4 @@
-@%watcom%\binw\wlsystem.lnk
+@%watcom%\binw\wlink.lnk
 option map, eliminate, symfile, quiet
 debug all
 system dos

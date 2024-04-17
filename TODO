@@ -1,0 +1,58 @@
+; timeout if 001 is not reached in 5 seconds
+; only send QUIT if we're in idlestate or some shit
+; clear auth buffer
+
+command to quit?
+string operations/library
+
+cx = -1 = error
+dispatchLine = -1? quit time
+
+logic.asm:
+
+parse_line:
+  parse_tags
+  parse_prefix
+  parse_command
+  consume_crlf
+parse_tags
+  consume_@ or return
+  tags <- consume_word
+  consume_spaces
+parse_prefix
+  consume_: or return
+  prefix <- consume_word
+  consume_spaces
+parse_command
+  command <- consume_word
+  consume_spaces
+parse_crlf
+  consume_crlf
+
+consume_word = set value, set len
+
+8 args max
+
+parse_tags
+parse_prefix
+parse_command
+
+<message>  ::= ['@' <tags> SPACE] [':' <prefix> <SPACE> ] <command> <params> <crlf>
+<prefix>   ::= <servername> | <nick> [ '!' <user> ] [ '@' <host> ]
+<command>  ::= <letter> { <letter> } | <number> <number> <number>
+<SPACE>    ::= ' ' { ' ' }
+<params>   ::= <SPACE> [ ':' <trailing> | <middle> <params> ]
+
+<middle>   ::= <Any *non-empty* sequence of octets not including SPACE
+               or NUL or CR or LF, the first of which may not be ':'>
+<trailing> ::= <Any, possibly *empty*, sequence of octets not including
+                 NUL or CR or LF>
+
+<crlf>     ::= CR LF
+
+:foo!foo@foo.tmi.twitch.tv PRIVMSG #bar :bleedPurple
+^ user                     ^ cmd   ^chnnl ^text
+
+CAP REQ :twitch.tv/commands
+
+once we have pings done, merge test.py with some test commands

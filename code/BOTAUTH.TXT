@@ -1,0 +1,3 @@
+PASS passwor2d
+USER jookbot 0 * jookbot
+NICK jookbot

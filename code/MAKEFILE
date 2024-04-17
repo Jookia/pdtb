@@ -1,6 +1,8 @@
 tcpobjs = ARP.OBJ ETH.OBJ ETHTYPE.OBJ IPASM.OBJ IP.OBJ IPTYPE.OBJ PACKET.OBJ TCP.OBJ TCPSOCKM.OBJ TIMER.OBJ TRACE.OBJ UTILS.OBJ
-botobjs = bot.obj hello.obj
+botobjs = bot.obj state.obj logic.obj log.obj parse.obj
 testobjs = testio.obj
+
+.extensions : .nas
 
 all : bot.exe test.exe
 
@@ -16,6 +18,8 @@ clean : .symbolic
 
 .asm : tcplib;test;bot;
 
+.nas : tcplib;test;bot;
+
 .cpp : tcplib;test;bot;
 
 .obj : obj\tcplib;obj\test\;obj\bot;
@@ -26,8 +30,8 @@ clean : .symbolic
 .cpp.obj :
   wpp $[* -fc=ppargs -fo=obj\$[*.obj -fr=obj\$[&.err
 
-hello.obj : bot\hello.asm
-  nasm -f obj bot\hello.asm -o obj\bot\hello.obj
+.nas.obj : 
+  nasm -W -Ox -g -F borland -f obj $[*.nas -o obj\$[*.obj
 
 bot.exe: $(tcpobjs) $(botobjs)
   wlink name $@ file obj\tcplib\*.obj,obj\bot\*.obj
