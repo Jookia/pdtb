@@ -1,0 +1,8 @@
+*.LOG
+*.SYM
+*.MAP
+*.EXE
+*.OBJ
+*.ERR
+LVAUTH.TXT
+drive_c
