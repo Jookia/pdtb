@@ -2,7 +2,7 @@
 /*
 
    mTCP Timer.cpp
-   Copyright (C) 2008-2013 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2008-2020 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -73,7 +73,6 @@ void (__interrupt __far *Timer_old_tick_handler)( );
 
 void __interrupt __far Timer_tick_handler( )
 {
-   FINT_DS_FIXUP();
    Timer_CurrentTicks++;
    _chain_intr( Timer_old_tick_handler );
 }
@@ -82,7 +81,6 @@ void interrupt ( *Timer_old_tick_handler)( ... );
 
 void interrupt Timer_tick_handler( ... )
 {
-   FINT_DS_FIXUP();
    Timer_CurrentTicks++;
    Timer_old_tick_handler();
 }
@@ -91,7 +89,7 @@ void interrupt Timer_tick_handler( ... )
 void Timer_start( void ) {
   disable_ints( );
   Timer_old_tick_handler = getvect( 0x1c );
-  setvect( 0x1c, FINT_FP_FIXUP(Timer_tick_handler) );
+  setvect( 0x1c, Timer_tick_handler );
   Timer_hooked = 1;
   enable_ints( );
 }

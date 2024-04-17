@@ -1,8 +1,7 @@
-
 /*
 
-   mTCP Eth.cpp
-   Copyright (C) 2005-2020 Michael B. Brutman (mbbrutman@gmail.com)
+   mTCP IPv6.H
+   Copyright (C) 2015-2020 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -22,32 +21,37 @@
    along with mTCP.  If not, see <http://www.gnu.org/licenses/>.
 
 
-   Description: Eth data structures and code (one day?)
+   Description: A minimal definition of an IPv6 header.  At some point
+                IPv6 will be supported, so this will be filled out more
+                later on.
 
    Changes:
 
-   2011-05-27: Initial release as open source software
+   2015-03-31: New for use with pkttool.cpp
 
 */
 
 
+#ifndef _IPV6_H
+#define _IPV6_H
 
-// Storage for Eth.  We don't do much at the Ethernet level, so this is
-// pretty thin.
-
-#include <stdio.h>
-
-#include "Eth.h"
+#include "types.h"
 
 
-EthAddr_t const Eth::Eth_Broadcast = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+// Provide just a minimal IPv6 header so that we can parse the source and
+// destination addresses.
 
-EthAddr_t MyEthAddr;
+class Ipv6Header {
 
+  public:
 
-// Minimum MTU for Ethernet is 46.  Maximum if 1500.  If you don't
-// know about the networks in between you and the target, 576 is the
-// safe default.
+    uint32_t   versClassFlow;
+    uint16_t   payloadLen;
+    uint8_t    nextHeader;
+    uint8_t    hopLimit;
+    Ipv6Addr_t src;
+    Ipv6Addr_t dest;
 
-uint16_t  MyMTU = ETH_MTU_SAFE;
+};
 
+#endif

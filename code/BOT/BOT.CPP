@@ -31,10 +31,15 @@ uint8_t *linePos = lineBuffer;
 #define LINE_END (lineBuffer + sizeof(lineBuffer))
 #define LINE_LEN (linePos - lineBuffer)
 
+void __interrupt __far handler_ctrlbrk(void) {
+}
+void __interrupt __far handler_ctrlc(void) {
+}
+
 /* user customziable stuff */
 int setupSocket(void) {
 	Utils::parseEnv();
-	Utils::initStack(1, TCP_SOCKET_RING_SIZE);
+	Utils::initStack(1, TCP_SOCKET_RING_SIZE, handler_ctrlbrk, handler_ctrlc);
 	sock = TcpSocketMgr::getSocket();
 	IpAddr_t serverAddr = { 10, 0, 2, 2 };
 	uint16_t srcPort = rand() + 1024;
@@ -47,7 +52,6 @@ void cleanupSocket(void) {
 	sock->close();
 	TcpSocketMgr::freeSocket(sock);
 	Utils::endStack();
-	fclose(TrcStream);
 }
 
 /* sendData */

@@ -11,10 +11,16 @@
 
 TcpSocket *sock;
 
+void __interrupt __far handler_ctrlbrk(void) {
+}
+
+void __interrupt __far handler_ctrlc(void) {
+}
+
 /* user customziable stuff */
 int setupSocket(void) {
 	Utils::parseEnv();
-	Utils::initStack(1, TCP_SOCKET_RING_SIZE);
+	Utils::initStack(1, TCP_SOCKET_RING_SIZE, handler_ctrlbrk, handler_ctrlc);
 	sock = TcpSocketMgr::getSocket();
 	IpAddr_t serverAddr = { 10, 0, 2, 2 };
 	uint16_t srcPort = rand() + 1024;
@@ -27,7 +33,14 @@ void cleanupSocket(void) {
 	sock->close();
 	TcpSocketMgr::freeSocket(sock);
 	Utils::endStack();
-	fclose(TrcStream);
+}
+
+#define TEST_INPUT  0
+#define TEST_OUTPUT 1
+int curr_test = TEST_INPUT;
+
+int clamp(int a, int b) {
+	return (a < b) ? a : b;
 }
 
 int processPackets(void) {
@@ -46,46 +59,62 @@ int processPackets(void) {
 	while((packet = (uint8_t*)sock->incoming.dequeue()) != 0) {
 		IpHeader *ip = (IpHeader*)(packet + sizeof(EthHeader));
 		TcpHeader *tcp = (TcpHeader*)(ip->payloadPtr());
-		uint16_t len = ip->payloadLen() - tcp->getTcpHlen();
-		TcpBuffer *buf = TcpBuffer::getXmitBuf();
-		while(buf == NULL) {
-	PACKET_PROCESS_SINGLE;
-	Arp::driveArp();
-	Tcp::drivePackets();
-		printf("skipped packet\n");
-		continue;
+		uint16_t len_in = ip->payloadLen() - tcp->getTcpHlen();
+		uint8_t *data_in = (uint8_t*)tcp + sizeof(TcpHeader);
+		TcpBuffer *buf_out;
+		if(curr_test == TEST_INPUT) {
+			Buffer_free(packet);
+			while(!(buf_out = TcpBuffer::getXmitBuf())) {
+				PACKET_PROCESS_SINGLE;
+				Arp::driveArp();
+				Tcp::drivePackets();
+				continue;
+			}
+			uint8_t *data_out = (uint8_t*)buf_out + sizeof(TcpBuffer);
+			snprintf((char*)data_out, 32, "got tcp payload length %i\n", len_in);
+			buf_out->dataLen = 32;
+			int rc = sock->enqueue(buf_out);
+			printf("sent pkt %p %i\n", buf_out, rc);
+		} else if(curr_test == TEST_OUTPUT) {
+			int size;
+			sscanf((char const*)data_in, "send me %i please", &size);
+			printf("they want us to send %i\n", size);
+			Buffer_free(packet);
+			int step = 500;
+			for(int i = 0; i < size; i += step) {
+				while(!(buf_out = TcpBuffer::getXmitBuf())) {
+					PACKET_PROCESS_SINGLE;
+					Arp::driveArp();
+					Tcp::drivePackets();
+					continue;
+				}
+				int amount = clamp(size - i, step);
+				uint8_t *data_out = (uint8_t*)buf_out + sizeof(TcpBuffer);
+				memset(buf_out, 'A', amount);
+				buf_out->dataLen = amount;
+				int rc = sock->enqueue(buf_out);
+				printf("sent pkt %p %i\n", buf_out, rc);
+			}
 		}
-		    
-		uint8_t *data = (uint8_t*)buf + sizeof(TcpBuffer);
-		snprintf((char*)data, 32, "got tcp payload length %i\n", len);
-		buf->dataLen = 32;
-		int rc = sock->enqueue(buf);
-		printf("sent pkt %p %i\n", buf, rc);
-		Buffer_free(packet);
-		
-	#if 0
-		IpHeader *ip = (IpHeader*)(packet + sizeof(EthHeader));
-		TcpHeader *tcp = (TcpHeader*)(ip->payloadPtr());
-		uint8_t *userData = ((uint8_t*)tcp) + tcp->getTcpHlen();
-		uint16_t len = ip->payloadLen() - tcp->getTcpHlen();
-		printf("got pkt %p %i\n", userData, len);
-		TcpBuffer *buf = TcpBuffer::getXmitBuf();
-		uint8_t *data = (uint8_t*)buf + sizeof(TcpBuffer);
-		snprintf((char*)data, 16, "size %i got\n", len);
-		buf->dataLen = 16;
-		memcpy(data, userData, len);
-		buf->dataLen = len;
-		int rc = sock->enqueue(buf);
-		Buffer_free(packet);
-		printf("sent pkt %p %i\n", buf, rc);
-	#endif
 	}
 	return 1;
 }
 
-int main(void) {
+int main(int argc, char* argv[]) {
 	int rc = 1;
-	fprintf(stdout, "sizeof(TcpBuffer) == %i\n", sizeof(TcpBuffer));
+	if(argc != 2) {
+		fprintf(stderr, "Usage: test.exe TEST\n");
+		return 1;
+	}
+	if(!strcmp(argv[1], "input")) {
+		curr_test = TEST_INPUT;
+	} else if(!strcmp(argv[1], "output")) {
+		curr_test = TEST_OUTPUT;
+	} else {
+		fprintf(stderr, "Invalid test\n");
+		return 1;
+	}
+	fprintf(stdout, "Test %i selected\n", curr_test);
 	if(setupSocket()) {
 		fprintf(stdout, "Unable to connect to host\n");
 		cleanupSocket();

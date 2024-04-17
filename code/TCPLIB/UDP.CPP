@@ -1,8 +1,7 @@
-
 /*
 
    mTCP Udp.cpp
-   Copyright (C) 2005-2013 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2005-2020 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -58,23 +57,17 @@
 
 
 
-#ifdef __TURBOC__
-#include <alloc.h>
-#else
+#include <dos.h>
 #include <malloc.h>
-#endif
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <dos.h>
 
-#include "Utils.h"
-#include "Arp.h"
-#include "Eth.h"
-#include "Ip.h"
-#include "Udp.h"
+#include "udp.h"
+#include "trace.h"
+#include "packet.h"
+#include "eth.h"
+#include "ip.h"
 
 
 
@@ -85,6 +78,18 @@ void    (*Udp::callbackFunctions[ UDP_MAX_CALLBACKS ])
 				 const UdpHeader *udp);
 
 
+uint32_t Udp::Packets_Sent = 0;
+uint32_t Udp::Fragments_Sent = 0;
+uint32_t Udp::Packets_Received = 0;
+uint32_t Udp::NoHandler = 0;
+uint32_t Udp::ChecksumErrors = 0;
+
+
+
+void Udp::dumpStats( FILE *stream ) {
+  fprintf( stream, "Udp: Sent %lu Rcvd %lu NoHandler %lu Checksum errs %lu Fragments sent %lu\n",
+           Packets_Sent, Packets_Received, NoHandler, ChecksumErrors, Fragments_Sent );
+}
 
 
 // Udp::registerCallback
@@ -164,6 +169,7 @@ int8_t Udp::unregisterCallback( uint16_t port ) {
 // allocated memory.
 //
 // Return codes:
+//  -1 is bad - this is a hard error
 //   0 is good - packet was sent
 //   1 is pending ARP resolution; try again later.
 //
@@ -188,13 +194,8 @@ int8_t Udp::sendUdp( IpAddr_t host, uint16_t srcPort, uint16_t dstPort,
       return sendUdpFragments( host, srcPort, dstPort,
                                payloadLen, data, preAlloc );
     #else
-      // Return code 0 is the proper way to do this; it simulates the packet
-      // getting lost in transit, presumably because it is too big.  This is
-      // better than claiming an ARP failure or inventing another return code.
-      // The user will need warnings on to see it happen though.
-
       TRACE_UDP_WARN(( "Udp: Packet too big and cant fragment!\n" ));
-      return 0;
+      return -1;
     #endif
   }
 
@@ -205,8 +206,14 @@ int8_t Udp::sendUdp( IpAddr_t host, uint16_t srcPort, uint16_t dstPort,
   UdpPacket_t* packetPtr;
 
   if ( preAlloc == 0 ) {
+
     // Malloc space for headers and user data and then copy the user data in.
     packetPtr = (UdpPacket_t*)malloc( packetLen );
+    if ( packetPtr == NULL ) {
+      TRACE_UDP_WARN(( "Udp: malloc error sending data\n" ));
+      return -1;
+    }
+
     memcpy( ((uint8_t *)packetPtr) + sizeof(UdpPacket_t), data, payloadLen );
   }
   else {
@@ -241,9 +248,10 @@ int8_t Udp::sendUdp( IpAddr_t host, uint16_t srcPort, uint16_t dstPort,
 
   // Returns 0 if we resolved, 1 if we are pending ARP resolution.
   // If pending ARP resolution the user must do the retry.
-  uint8_t rc = packetPtr->ip.setDestEth( &packetPtr->eh.dest );
+  uint8_t rc = packetPtr->ip.setDestEth( packetPtr->eh.dest );
   if ( rc == 0 ) {
     Packet_send_pkt( packetPtr, packetLen );
+    Packets_Sent++;
   }
 
 
@@ -279,6 +287,10 @@ int8_t Udp::sendUdpFragments( IpAddr_t host, uint16_t srcPort,
 
   uint16_t packetLen = MyMTU + sizeof(EthHeader);
   UdpPacket_t* packetPtr = (UdpPacket_t *)malloc( packetLen );
+  if ( packetPtr == NULL ) {
+      TRACE_UDP_WARN(( "Udp: malloc error sending fragments"\n ));
+      return -1;
+  }
 
 
   // Prealloc = 1 doesn't help if we are fragmenting.  But we still
@@ -338,7 +350,7 @@ int8_t Udp::sendUdpFragments( IpAddr_t host, uint16_t srcPort,
 
   // Returns 0 if we resolved, 1 if we are pending ARP resolution.
   // If pending ARP resolution the user must do the retry.
-  uint8_t rc = packetPtr->ip.setDestEth( &packetPtr->eh.dest );
+  uint8_t rc = packetPtr->ip.setDestEth( packetPtr->eh.dest );
 
 
   if ( rc ) {
@@ -385,6 +397,8 @@ int8_t Udp::sendUdpFragments( IpAddr_t host, uint16_t srcPort,
 
     Packet_send_pkt( packetPtr,
                      copyLen + sizeof( EthHeader ) + sizeof( IpHeader ) );
+    Packets_Sent++;
+    Fragments_Sent++;
 
   }
 
@@ -398,6 +412,8 @@ int8_t Udp::sendUdpFragments( IpAddr_t host, uint16_t srcPort,
 
 
 void Udp::process( const unsigned char *packet, IpHeader *ip ) {
+
+  Packets_Received++;
 
   UdpHeader *udp = (UdpHeader *)(ip->payloadPtr( ));
 
@@ -427,6 +443,7 @@ void Udp::process( const unsigned char *packet, IpHeader *ip ) {
     TRACE_UDP_WARN(( "Udp: Bad chksum from %d.%d.%d.%d:%u to port %u len: %u\n",
                      ip->ip_src[0], ip->ip_src[1], ip->ip_src[2], ip->ip_src[3],
                      srcPort, dstPort, udpLen ));
+    ChecksumErrors++;
     Buffer_free( packet );
     return;
   }
@@ -446,6 +463,7 @@ void Udp::process( const unsigned char *packet, IpHeader *ip ) {
 
   if ( i == callbackPorts ) {
     // There was no handler so we have to throw the packet away.
+    NoHandler++;
     Buffer_free( packet );
   }
 

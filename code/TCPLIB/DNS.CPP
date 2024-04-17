@@ -1,8 +1,7 @@
-
 /*
 
    mTCP Dns.cpp
-   Copyright (C) 2008-2013 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2008-2020 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -49,14 +48,12 @@
 #include <time.h>
 #include <malloc.h>
 
-#include "types.h"
-
-#include "utils.h"
+#include "dns.h"
 #include "timer.h"
+#include "trace.h"
+#include "utils.h"
 #include "packet.h"
 #include "arp.h"
-#include "udp.h"
-#include "dns.h"
 
 #ifdef COMPILE_TCP
 #include "tcp.h"
@@ -277,6 +274,13 @@ void Dns::sendRequest( IpAddr_t resolver, const char *serverName, uint16_t ident
   int8_t rc = Udp::sendUdp( resolver, handlerPort, 53,
                             reqLen, (uint8_t *)&query, 1 );
 
+  if ( rc == -1 ) {
+    // Fatal error from UDP.  This probably never happens unless you are
+    // low on memory.  If it does happen a debug trace will expose it.
+    return;
+  }
+
+
   // Spin and process packets until we can resolve ARP and send our request
   while ( rc == 1 ) {
 
@@ -296,6 +300,12 @@ void Dns::sendRequest( IpAddr_t resolver, const char *serverName, uint16_t ident
 
     rc = Udp::sendUdp( resolver, handlerPort, 53,
                        reqLen, (uint8_t *)&query, 1 );
+
+    if ( rc == -1 ) {
+      // This should not happen at this point; it would have been caught
+      // up above the first time we send the UDP packet.
+      return;
+    }
 
   }
 
@@ -527,8 +537,8 @@ void Dns::udpHandler(const unsigned char *packet,
       TRACE_DNS(( "Dns:   Type: %d  Class: %d  TTL: %ld  RDL: %d\n", type, cls, ttl, rdl ));
 
       if ( TRACE_ON_DNS && TRACE_ON_DUMP ) {
-	TRACE_DNS(( "Dns:   Raw Data:\n" ));
-	Utils::dumpBytes( (uint8_t *)current, rdl );
+        Trace_tprintf( "Dns:   Raw Data:\n" );
+	Utils::dumpBytes( Trace_Stream, (uint8_t *)current, rdl );
       }
 
       #endif

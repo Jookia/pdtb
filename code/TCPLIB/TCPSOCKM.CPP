@@ -2,7 +2,7 @@
 /*
 
    mTCP TcpSockM.cpp
-   Copyright (C) 2008-2013 Michael B. Brutman (mbbrutman@gmail.com)
+   Copyright (C) 2008-2020 Michael B. Brutman (mbbrutman@gmail.com)
    mTCP web page: http://www.brutman.com/mTCP
 
 
@@ -53,8 +53,9 @@
 #endif
 #include <string.h>
 
-#include "Utils.h"
-#include "Timer.h"
+#include "timer.h"
+#include "trace.h"
+#include "utils.h"
 
 #include "tcp.h"
 #include "tcpsockm.h"
@@ -89,7 +90,6 @@ uint8_t    TcpSocketMgr::pendingAccepts;
 // Unrelated, but here for lack of a TcpSocket::init method.
 uint16_t   TcpSocketMgr::MSS_to_advertise;
 
-TcpSocket allSockets[3];
 
 
 int8_t TcpSocketMgr::init( uint8_t maxSockets ) {
@@ -100,7 +100,7 @@ int8_t TcpSocketMgr::init( uint8_t maxSockets ) {
   }
 
   // Allocate memory for socket data structures
-  TcpSocket *socketsMemPtr = allSockets;
+  TcpSocket *socketsMemPtr = (TcpSocket *)malloc( maxSockets * sizeof( TcpSocket ) );
   if ( socketsMemPtr == NULL ) {
     allocatedSockets = 0;
     TRACE_TCP_WARN(( "Tcp: Mem alloc err creating socket pool\n" ));
@@ -131,7 +131,7 @@ int8_t TcpSocketMgr::init( uint8_t maxSockets ) {
 void TcpSocketMgr::stop( void ) {
   // The user is responsible for closing and draining sockets properly.
   // We are just here to deallocate the memory that we used.
-  if ( socketsMemPtr != NULL ) { ; }
+  if ( socketsMemPtr != NULL ) { free( socketsMemPtr ); }
 }
 
 
@@ -233,6 +233,8 @@ TcpSocket *TcpSocketMgr::accept( void ) {
 	socketTable[i]->pendingAccept = 0;
 	pendingAccepts--;
 
+        rc->lastActivity = TIMER_GET_CURRENT( );
+
 	TRACE_TCP(( "Tcp: (%08lx) Accepted new socket, pendingAccepts=%u\n",
 		    rc, pendingAccepts ));
 	break;
@@ -291,9 +293,23 @@ void TcpSocketMgr::makeInactive( TcpSocket *target ) {
     }
   }
 
+  /*
+     Faster, but does not preserve ordering.
+     Apparently ordering is important for web clients.
+
   if ( found ) {
     activeSockets--;
     socketTable[i] = socketTable[activeSockets];
+  }
+  */
+
+  // Slide the remaining sockets down to fill the hole.
+
+  if ( found ) {
+    activeSockets--;
+    for ( uint8_t j = i; j < getActiveSockets( ); j++ ) {
+      socketTable[j] = socketTable[j+1];
+    }
   }
 
 }

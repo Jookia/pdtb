@@ -1,19 +1,18 @@
-#tcpobjs = packet.obj arp.obj eth.obj ip.obj tcp.obj tcpsockm.obj udp.obj utils.obj dns.obj timer.obj ipasm.obj
-tcpobjs = packet.obj arp.obj eth.obj ip.obj tcp.obj utils.obj tcpsockm.obj timer.obj ipasm.obj
-botobjs = bot.obj # hello.obj
+tcpobjs = ARP.OBJ ETH.OBJ ETHTYPE.OBJ IPASM.OBJ IP.OBJ IPTYPE.OBJ PACKET.OBJ TCP.OBJ TCPSOCKM.OBJ TIMER.OBJ TRACE.OBJ UTILS.OBJ
+botobjs = bot.obj
 testobjs = testio.obj
 
-all : bot.com test.com
+all : bot.exe test.exe
 
 clean : .symbolic
   @del /q obj\tcplib
   @del /q obj\test
   @del /q obj\bot
-  @del /q obj
-  @del *.com
+  @del /q obj\
   @del *.exe
   @del *.sym
   @del *.map
+  @del *.log
 
 .asm : tcplib;test;bot;
 
@@ -30,8 +29,8 @@ clean : .symbolic
 hello.obj : bot\hello.asm
   nasm -f obj bot\hello.asm -o obj\bot\hello.obj
 
-bot.com: $(tcpobjs) $(botobjs)
+bot.exe: $(tcpobjs) $(botobjs)
   wlink name $@ file obj\tcplib\*.obj,obj\bot\*.obj
 
-test.com: $(tcpobjs) $(testobjs)
+test.exe: $(tcpobjs) $(testobjs)
   wlink name $@ file obj\tcplib\*.obj,obj\test\*.obj
