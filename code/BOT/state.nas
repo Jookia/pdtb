@@ -18,22 +18,29 @@ section _TEXT
 ; cx = len
 ; rets 0 if good, positive int if bad
 sendPacket:
+    push es
     mov ax, cx
     mov dx, cx
     call currentSendBuffer_
     cmp ax, 0
     jne .continue
     mov ax, 10
+    pop es
     ret
 .continue:
     mov di, ax
     rep movsb
-    jmp sendNewBuffer_
+    call sendNewBuffer_
+    pop es
+    ret
 
 ; Prelude
 global asmRun_
 ; Prologue
 asmRun_:
+    push es
+    push ds
+    pop es
     push bx
     push cx
     push dx
@@ -54,14 +61,18 @@ stateStart:
     mov di, lineBuffer
     mov dx, lineBufferLen
 stateGetPacket:
+    push es
     call recvNewPacket_ ; Blocking call
+    pop es
     cmp ax, 0 ; Check if packet is empty
     jz stateDisconnect ; No more packet, bail
     cmp ax, -1 ; Check if quit requested
     jz stateQuit
     ; Get new packet address
     mov bx, ax
+    push es
     call currentRecvPacket_ ; Get packet pointer
+    pop es
     mov si, ax
 stateAppendLine:
     mov ax, 0
@@ -118,6 +129,7 @@ asmQuit:
     pop dx
     pop cx
     pop bx
+    pop es
     ret
 
 

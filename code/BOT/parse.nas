@@ -6,13 +6,6 @@ GROUP DGROUP CONST2 DATA _BSS
 
 section _TEXT
 
-; take in a string
-; fill up the following values:
-; - param1
-; - param2
-; - param3
-; - param4
-
 ; call convention:
 ; - ah,al: input/output regs
 ; - bp: scratch register
@@ -155,9 +148,12 @@ peekCR:
 .return:
     ret
 
-parseCR:
+parseCRLF:
     do_read
     cmp al, 0xd ; \r
+    jne .return
+    do_read
+    cmp al, 0xa ; \n
     jne .return
     clc
     ret
@@ -237,7 +233,7 @@ parseMessage:
     mov bp, paramsList
     mov [paramsListLen], word 0
     do_parse parseParams
-    do_parse parseCR
+    do_parse parseCRLF
 .return: ; Only used for errors
     ret
 
@@ -291,7 +287,7 @@ paramAt:
 
 section CONST2
 
-section _BSS
+section DATA
 
 global parseBuffer
 global parseBufferLen

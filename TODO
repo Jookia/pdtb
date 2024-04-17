@@ -1,19 +1,13 @@
-string operations/library
+string builder library
 - replace snprintf
 - copying instructions
-- optional instructions
-- decision instructions
 
-
+push_str
 in: si bx
-buffer: di cx
-
-write_str INCOMING LEN
-write_char SPACE
-write_char :
-write_num ax
-write_char SPACE
-write_str logmsg LEN
+write_char ax
+write_str di cx ; strcpy
+write_num ax ;
+pop_str
 ; check if buffer full
 
 printFormatIncoming: db "INCOMING %i: %.*s",0x00

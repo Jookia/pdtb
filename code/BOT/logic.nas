@@ -20,6 +20,7 @@ section _TEXT
 readAuth:
     push bp
     mov bp, sp
+    push es
     push bx
     push cx
     push dx
@@ -54,6 +55,7 @@ readAuth:
     pop dx
     pop cx
     pop bx
+    pop es
     pop bp
     ret
 
@@ -89,9 +91,11 @@ idleState:
     jmp logOutgoing
     .notPing:
     call doParse
-    mov si, cmdBuffer
+    jc .noprint
+    mov si, [cmdBuffer]
     mov cx, [cmdBufferLen]
     call logIncoming
+.noprint:
     mov cx, 0
     ret
 

@@ -305,7 +305,7 @@ void testParse_normal(struct testData data) {
     offset += snprintf(in_buf + offset, sizeof(in_buf) - offset, " %s%s", longmode, *param);
     params_count++;
   }
-  offset += snprintf(in_buf + offset, sizeof(in_buf) - offset, "\r");
+  offset += snprintf(in_buf + offset, sizeof(in_buf) - offset, "\r\n");
   if(offset >= sizeof(in_buf)) {
     printf("Wrote too much to in_buf\n");
     exit(1);
@@ -376,9 +376,9 @@ void testParse_bufferOverflow(void) {
   free(msg);
 }
 
-// Tests we get an error if we omit an '\r'
+// Tests we get an error if we omit an '\r\n'
 void testParse_noCR(void) {
-  char *msg = "COMMAND \r";
+  char *msg = "COMMAND \r\n";
   int len = strlen(msg);
   int ret = callDoParse(msg, len - 1);
   ASSERT_INT(ret, 1);
@@ -388,7 +388,7 @@ void testParse_noCR(void) {
 
 // Tests we get an error if we don't parse everything
 void testParse_leftoverInput(void) {
-  char *msg = "COMMAND \rGARBAGE";
+  char *msg = "COMMAND \r\nGARBAGE";
   int len = strlen(msg);
   int ret = callDoParse(msg, len);
   ASSERT_INT(ret, 1);
@@ -396,7 +396,7 @@ void testParse_leftoverInput(void) {
 
 // Tests we get an error if we have too many parameters
 void testParse_tooManyParameters(void) {
-  char *msg = "COMMAND G A R B A G E H E\r";
+  char *msg = "COMMAND G A R B A G E H E\r\n";
   int len = strlen(msg);
   int ret = callDoParse(msg, len);
   ASSERT_INT(ret, 1);

@@ -92,12 +92,12 @@ def require_login(conn):
 # Sends a fake message of the day
 def send_motd(conn, user):
     motds = [
-        "001   " + user + "  Welcome to the test server!",
-        "002   " + user + "  Your host is testserver",
-        "003   " + user + "  Created in 2000",
-        "375   " + user + "  Dear test bot,",
-        "372   " + user + "  I hope you have a lovely day.",
-        "376   " + user + "  Yours, spaghetti man.",
+        "001   " + user + "  :Welcome to the test server!",
+        "002   " + user + "  :Your host is testserver",
+        "003   " + user + "  :Created in 2000",
+        "375   " + user + "  :Dear test bot,",
+        "372   " + user + "  :I hope you have a lovely day.",
+        "376   " + user + "  :Yours, spaghetti man.",
     ]
     for line in motds:
         send_line(conn, ":testserver    " + line)

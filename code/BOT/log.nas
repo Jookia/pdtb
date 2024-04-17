@@ -7,13 +7,19 @@ GROUP DGROUP CONST2 DATA _BSS
 extern snprintf_ ; int sprintf(char *str, size_t size, const char *format, ...)
 extern getenv_ ; char* getenv(char *name);
 
+extern writeNum
+extern writeChar
+
 section _TEXT
+
+; TODO: move logPrintf back to C
 
 ; int openLog(void)
 global openLog_
 openLog_:
     push bp
     mov bp, sp
+    push es
     push bx
     push cx
     push dx
@@ -48,6 +54,7 @@ openLog_:
     pop dx
     pop cx
     pop bx
+    pop es
     pop bp
     ret
 
@@ -117,6 +124,8 @@ writeSpace:
 snprintfNice:
     pop cx ; ret
     call snprintf_
+    push ds
+    pop es
     push cx
     push bp
     mov bp, sp
@@ -211,42 +220,86 @@ logOutgoing:
     pop ax
     ret
 
-; returns null-terminated time in ax, cx
+; returns time in ax, cx
 createTimestamp:
+    push si
+    push di
+    push bx
     push dx
     push bp
     mov bp, sp
+    sub sp, 12
+    ; get time
     mov ax, 0x2C00
     int 0x21
     mov ah, 0
     mov al, dh
-    push ax
+    mov [bp-2], ax ; second
     mov al, cl
-    push ax
+    mov [bp-4], ax ; minute
     mov al, ch
-    push ax
+    mov [bp-6], ax ; hour
+    ; get date
     mov ax, 0x2A00
     int 0x21
     mov ah, 0
-    mov al, dh
-    push ax
     mov al, dl
-    push ax
-    push cx
-    push timeFormat
-    push timeBufferLen
-    push timeBuffer
-    call snprintfNice
+    mov [bp-8], ax ; day
+    mov al, dh
+    mov [bp-10], ax ; month
+    mov [bp-12], cx ; year
+    mov di, timeBuffer
+    mov cx, timeBufferLen
+    mov bx, 4
+    ; write year
+    mov ax, [bp-12]
+    call writeNum
+    mov ax, '-'
+    call writeChar
+    ; write month
+    mov bx, 2
+    mov ax, [bp-10]
+    call writeNum
+    mov ax, '-'
+    call writeChar
+    ; write day
+    mov bx, 2
+    mov ax, [bp-8]
+    call writeNum
+    mov ax, 'T'
+    call writeChar
+    ; write hour
+    mov bx, 2
+    mov ax, [bp-6]
+    call writeNum
+    mov ax, ':'
+    call writeChar
+    ; write minute
+    mov bx, 2
+    mov ax, [bp-4]
+    call writeNum
+    mov ax, ':'
+    call writeChar
+    ; write second
+    mov bx, 2
+    mov ax, [bp-2]
+    call writeNum
+    mov ax, cx
+    mov cx, timeBufferLen
+    sub cx, ax
+    mov ax, timeBuffer
     mov sp, bp
     pop bp
     pop dx
+    pop bx
+    pop di
+    pop si
     ret
 
 section CONST2
 
 printFormatIncoming: db "INCOMING %i: %.*s",0x00
 printFormatOutgoing: db "OUTGOING %i: %.*s",0x00
-timeFormat: db "%.4u-%.2u-%.2uT%.2u:%.2u:%.2u",0x00
 botlogEnv: db "BOT_LOG",0x00
 
 section _BSS
