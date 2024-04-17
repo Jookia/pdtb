@@ -15,6 +15,7 @@ section _TEXT
 
 ; call convention:
 ; - ah,al: input/output regs
+; - bp: scratch register
 ; - bx: len left in read buffer
 ; - cx: len left in write buffer
 ; - si: read buffer
@@ -95,23 +96,29 @@ copy:
 %define do_read do_parse read
 %define do_copy do_parse copy
 
-%macro set_parse_buffer 3 ; buf max len
-    mov di, %1
-    mov cx, %2
-    mov [%3], cx
+%macro set_parse_buffer 2 ; buf len
+    mov [%1], di
+    mov [%2], cx
+    clc
 %endmacro
 
-%macro sub_parse_buffer_len 1 ; max len
+%macro sub_parse_buffer_len 1 ; len
     sub [%1], cx
+    clc
 %endmacro
 
 ; HIGH LEVEL PRIMITIVES
 
-; Copies a possibly empty word until a space
+; Copies a possibly empty word until a space or CR
 global copyWord
 copyWord:
     do_peek
-    do_expect_not ' '
+    cmp al, ' '
+    clc
+    je .return
+    cmp al, 0xd ; \r
+    clc
+    je .return
     do_copy
     jmp copyWord
 .return:
@@ -141,8 +148,36 @@ parseWordIf:
 
 ; IRC SYNTAX
 
+peekCR:
+    do_peek
+    cmp al, 0xd ; \r
+    clc
+.return:
+    ret
+
+parseCR:
+    do_read
+    cmp al, 0xd ; \r
+    jne .return
+    clc
+    ret
+.return: ; Error case only
+    stc
+    ret
+
+; Copies data until CR
+copyToCR:
+    do_peek
+    cmp al, 0xd ; \r
+    clc
+    je .return
+    do_copy
+    jmp copyToCR
+.return:
+    ret
+
 parseTags:
-    set_parse_buffer tagsBuffer, tagsBufferLenMax, tagsBufferLen
+    set_parse_buffer tagsBuffer, tagsBufferLen
     mov ah, '@'
     do_parse parseWordIf
     sub_parse_buffer_len tagsBufferLen
@@ -150,7 +185,7 @@ parseTags:
     ret
 
 parsePrefix:
-    set_parse_buffer prefixBuffer, prefixBufferLenMax, prefixBufferLen
+    set_parse_buffer prefixBuffer, prefixBufferLen
     mov ah, ':'
     do_parse parseWordIf
     sub_parse_buffer_len prefixBufferLen
@@ -158,9 +193,40 @@ parsePrefix:
     ret
 
 parseCmd:
-    set_parse_buffer cmdBuffer, cmdBufferLenMax, cmdBufferLen
+    set_parse_buffer cmdBuffer, cmdBufferLen
     do_parse copyWord
     sub_parse_buffer_len cmdBufferLen
+.return:
+    ret
+
+; bp is current param in paramsList
+parseParams:
+    inc word [paramsListLen]
+    cmp word [paramsListLen], paramsListMax
+    jl .enoughParams
+    stc
+    ret
+.enoughParams:
+    mov [bp], di
+    mov [bp+2], cx
+    do_parse skipSpace
+    ; Figure out if this is one long param
+    do_peek
+    cmp al, ':'
+    clc
+    je .parseLong
+.parseShort:
+    do_parse copyWord
+    jmp .done
+.parseLong:
+    do_read ; Skip :
+    do_parse copyToCR
+.done:
+    sub [bp+2], cx
+    add bp, paramsListEntryLen
+    clc
+    do_parse peekCR
+    jne parseParams
 .return:
     ret
 
@@ -168,14 +234,11 @@ parseMessage:
     do_parse parseTags
     do_parse parsePrefix
     do_parse parseCmd
-    do_parse skipSpace
-    do_read
-    cmp al, 0xd ; \r
-    clc
-    jne .return
-    ret
+    mov bp, paramsList
+    mov [paramsListLen], word 0
+    do_parse parseParams
+    do_parse parseCR
 .return: ; Only used for errors
-    stc
     ret
 
 ; si: string to parse
@@ -186,30 +249,72 @@ doParse:
     push ax
     push bx
     push di ; used for write buffer
+    push bp ; extra variable
     mov bx, cx ; bx is used for read len
+    mov di, parseBuffer
+    mov cx, parseBufferLenMax
     call parseMessage
+    jc .return
+    cmp bx, 0
+    je .return
+    stc
+.return:
+    pop bp
     pop di
     pop bx
     pop ax
+    ret
+
+; ax = param num, starting at 0
+; return si and cx, ax
+; sets si to NULL 
+global paramAt
+paramAt: 
+    cmp [paramsListLen], ax
+    jg .valid
+    mov si, 0
+    mov cx, 0
+    ret
+.valid:
+    mov si, paramsList
+    cmp ax, 0
+    jz .done
+.loop:
+    dec ax
+    add si, paramsListEntryLen
+    cmp ax, 0
+    jnz .loop
+.done:
+    mov cx, [si+2]
+    mov si, [si]
     ret
 
 section CONST2
 
 section _BSS
 
+global parseBuffer
+global parseBufferLen
 global tagsBuffer
 global tagsBufferLen
 global prefixBuffer
 global prefixBufferLen
 global cmdBuffer
 global cmdBufferLen
+global paramsList
+global paramsListLen
 
-tagsBuffer: resb 32
-tagsBufferLenMax: equ $ - tagsBuffer
+parseBuffer: resb 512
+parseBufferLenMax equ $ - parseBuffer
+parseBufferLen: resb 2
+tagsBuffer: resb 2
 tagsBufferLen: resb 2
-prefixBuffer: resb 32
-prefixBufferLenMax: equ $ - prefixBuffer
+prefixBuffer: resb 2
 prefixBufferLen: resb 2
-cmdBuffer: resb 8
-cmdBufferLenMax: equ $ - cmdBuffer
+cmdBuffer: resb 2
 cmdBufferLen: resb 2
+
+paramsListEntryLen equ 4 ; buffer pointer + len
+paramsList: resb 16
+paramsListMax equ ($ - paramsList) / paramsListEntryLen
+paramsListLen: resb 2

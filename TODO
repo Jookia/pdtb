@@ -1,0 +1,31 @@
+string operations/library
+- replace snprintf
+- copying instructions
+- optional instructions
+- decision instructions
+
+
+in: si bx
+buffer: di cx
+
+write_str INCOMING LEN
+write_char SPACE
+write_char :
+write_num ax
+write_char SPACE
+write_str logmsg LEN
+; check if buffer full
+
+printFormatIncoming: db "INCOMING %i: %.*s",0x00
+printFormatOutgoing: db "OUTGOING %i: %.*s",0x00
+timeFormat: db "%.4u-%.2u-%.2uT%.2u:%.2u:%.2u",0x00
+
+; timeout if 001 is not reached in 5 seconds
+; only send QUIT if we're in idlestate or some shit
+; clear auth buffer
+
+command to quit?
+
+CAP REQ :twitch.tv/commands
+
+once we have pings done, merge test.py with some test commands

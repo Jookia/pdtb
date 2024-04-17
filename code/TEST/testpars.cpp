@@ -172,6 +172,19 @@ PARSE_TEST(testCopyWord_space, " Hello World",
   ASSERT_INT(out[0], 0);
 )
 
+// Copies a word until CR
+PARSE_TEST(testCopyWord_CR, "Hello\rWorld",
+  const char *word = "Hello";
+  int word_len = strlen(word);
+  data_out.len_read -= word_len;
+  data_out.len_write -= word_len;
+  data_out.read += word_len;
+  data_out.write += word_len;
+  data_out.inout = '\r';
+  CHECK_PARSE_FUNC(copyWord, 0);
+  ASSERT_STRNCMP(out, word, word_len);
+)
+
 // Skips a sequence of spaces
 PARSE_TEST(testSkipSpace_normal, "   Hello",
   data_out.len_read -= 3;
@@ -224,18 +237,30 @@ int callDoParse(char *in, int len);
 
 #pragma aux tBuffer "tagsBuffer"
 #pragma aux tBufferLen "tagsBufferLen"
-extern char *tagsBuffer = (char*)tBuffer;
+extern char **tagsBuffer = (char**)tBuffer;
 extern int *tagsBufferLen = (int*)tBufferLen;
 
 #pragma aux pBuffer "prefixBuffer"
 #pragma aux pBufferLen "prefixBufferLen"
-extern char *prefixBuffer = (char*)pBuffer;
+extern char **prefixBuffer = (char**)pBuffer;
 extern int *prefixBufferLen = (int*)pBufferLen;
 
 #pragma aux cBuffer "cmdBuffer"
 #pragma aux cBufferLen "cmdBufferLen"
-extern char *cmdBuffer = (char*)cBuffer;
+extern char **cmdBuffer = (char**)cBuffer;
 extern int *cmdBufferLen = (int*)cBufferLen;
+
+#pragma aux cParamsListLen "paramsListLen"
+extern int *paramsListLen = (int*)cParamsListLen;
+
+#pragma aux paramAt "paramAt"
+void callParamAt(int index, char **dst, int *len);
+#pragma aux callParamAt = \
+  "call paramAt" \
+  "mov [di], si" \
+  "mov [bx], cx" \
+  parm [ax] [di] [bx] \
+  modify [si cx]
 
 // Stock test data
 
@@ -243,14 +268,20 @@ struct testData {
   char *tags;
   char *prefix;
   char *cmd;
+  const char **params;
   char *msg;
 };
 
+const char *params1[] = {"Hello", NULL};
+const char *params2[] = {"Hello", "world!", NULL};
+const char *params3[] = {"Hello world!", NULL};
+const char *params4[] = {"Hello", " world!", NULL};
+
 struct testData normals[] = {
-  {NULL,   NULL,     "COMAND", "COMAND \r"},
-  {"TAGS", NULL,     "COMAND", "@TAGS  COMAND \r"},
-  {NULL,   "PREFIX", "COMAND", ":PREFIX  COMAND \r"},
-  {"TAGS", "PREFIX", "COMAND", "@TAGS :PREFIX  COMAND \r"},
+  {NULL,   NULL,     "COMAND", params1, NULL},
+  {"TAGS", NULL,     "COMAND", params2, NULL},
+  {NULL,   "PREFIX", "COMAND", params3, NULL},
+  {"TAGS", "PREFIX", "COMAND", params4, NULL},
 };
 
 void printData(struct testData *data) {
@@ -259,21 +290,40 @@ void printData(struct testData *data) {
 }
 
 void testParse_normal(struct testData data) {
-  char *in = data.msg;
-  int len = strlen(in);
-  int ret = callDoParse(in, len);
+  static char in_buf[512];
+  int params_count = 0;
+  int offset = 0;
+  if(data.tags) {
+    offset += snprintf(in_buf + offset, sizeof(in_buf) - offset, "@%s ", data.tags);
+  }
+  if(data.prefix) {
+    offset += snprintf(in_buf + offset, sizeof(in_buf) - offset, ":%s ", data.prefix);
+  }
+  offset += snprintf(in_buf + offset, sizeof(in_buf) - offset, "%s", data.cmd);
+  for(const char **param = data.params; *param != NULL; ++param) {
+    char *longmode = (strstr(*param, " ")) ? ":" : "";
+    offset += snprintf(in_buf + offset, sizeof(in_buf) - offset, " %s%s", longmode, *param);
+    params_count++;
+  }
+  offset += snprintf(in_buf + offset, sizeof(in_buf) - offset, "\r");
+  if(offset >= sizeof(in_buf)) {
+    printf("Wrote too much to in_buf\n");
+    exit(1);
+  }
+  data.msg = in_buf;
+  int ret = callDoParse(in_buf, offset);
   DATA_ASSERT_INT(data, ret, 0);
   if(data.tags) {
     int len = strlen(data.tags);
     DATA_ASSERT_INT(data, *tagsBufferLen, len);
-    DATA_ASSERT_STRNCMP(data, tagsBuffer, data.tags, len);
+    DATA_ASSERT_STRNCMP(data, *tagsBuffer, data.tags, len);
   } else {
     DATA_ASSERT_INT(data, *tagsBufferLen, 0);
   }
   if(data.prefix) {
     int len = strlen(data.prefix);
     DATA_ASSERT_INT(data, *prefixBufferLen, len);
-    DATA_ASSERT_STRNCMP(data, prefixBuffer, data.prefix, len);
+    DATA_ASSERT_STRNCMP(data, *prefixBuffer, data.prefix, len);
   } else {
     DATA_ASSERT_INT(data, *prefixBufferLen, 0);
   }
@@ -281,7 +331,26 @@ void testParse_normal(struct testData data) {
   {
     int len = strlen(data.cmd);
     DATA_ASSERT_INT(data, *cmdBufferLen, len);
-    DATA_ASSERT_STRNCMP(data, cmdBuffer, data.cmd, len);
+    DATA_ASSERT_STRNCMP(data, *cmdBuffer, data.cmd, len);
+  }
+  // params
+  DATA_ASSERT_INT(data, *paramsListLen, params_count);
+  for(int i = 0; i < params_count; ++i) {
+    const char *param = *(data.params + i);
+    int param_len = strlen(param);
+    char *buf;
+    int buf_len;
+    callParamAt(i, &buf, &buf_len);
+    DATA_ASSERT_INT(data, buf_len, param_len);
+    DATA_ASSERT_STRNCMP(data, buf, param, buf_len);
+  }
+  // param overflow
+  {
+    char *buf;
+    int buf_len;
+    callParamAt(params_count + 1, &buf, &buf_len);
+    DATA_ASSERT_INT(data, (int)buf, NULL);
+    DATA_ASSERT_INT(data, (int)buf_len, NULL);
   }
 }
 
@@ -292,8 +361,8 @@ void testParse_normals(void) {
   }
 }
 
-// Tests we get an error if the tags buffer overflows
-void testParse_tagsOverflow(void) {
+// Tests we get an error if the parse buffer overflows
+void testParse_bufferOverflow(void) {
   int size = 520;
   char *msg = (char*)malloc(size);
   if(msg == NULL) {
@@ -302,19 +371,34 @@ void testParse_tagsOverflow(void) {
   }
   memset(msg, 'A', size);
   msg[0] = '@';
-  msg[514] = ' ';
   int ret = callDoParse(msg, size);
   ASSERT_INT(ret, 1);
   free(msg);
 }
 
 // Tests we get an error if we omit an '\r'
-void testParse_noR(void) {
-  int size = 520;
+void testParse_noCR(void) {
   char *msg = "COMMAND \r";
-  int ret = callDoParse(msg, strlen(msg));
+  int len = strlen(msg);
+  int ret = callDoParse(msg, len - 1);
+  ASSERT_INT(ret, 1);
+  ret = callDoParse(msg, len);
   ASSERT_INT(ret, 0);
-  ret = callDoParse(msg, strlen(msg) - 1);
+}
+
+// Tests we get an error if we don't parse everything
+void testParse_leftoverInput(void) {
+  char *msg = "COMMAND \rGARBAGE";
+  int len = strlen(msg);
+  int ret = callDoParse(msg, len);
+  ASSERT_INT(ret, 1);
+}
+
+// Tests we get an error if we have too many parameters
+void testParse_tooManyParameters(void) {
+  char *msg = "COMMAND G A R B A G E H E\r";
+  int len = strlen(msg);
+  int ret = callDoParse(msg, len);
   ASSERT_INT(ret, 1);
 }
 
@@ -328,12 +412,15 @@ int main(void) {
   testCopy_nospace_write();
   testCopyWord_normal();
   testCopyWord_space();
+  testCopyWord_CR();
   testSkipSpace_normal();
   testSkipSpace_nospace();
   testParseWordIf_normal();
   testParseWordIf_noprefix();
   testParse_normals();
-  testParse_tagsOverflow();
-  testParse_noR();
+  testParse_bufferOverflow();
+  testParse_noCR();
+  testParse_leftoverInput();
+  testParse_tooManyParameters();
   return 0;
 }
