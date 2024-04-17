@@ -10,8 +10,9 @@ extern logIncoming
 extern logOutgoing
 extern parseMessage
 
-extern prefix
-extern prefixLen
+extern doParse
+extern cmdBuffer
+extern cmdBufferLen
 
 section _TEXT
 
@@ -87,9 +88,9 @@ idleState:
     mov [si+1], byte 'O'
     jmp logOutgoing
     .notPing:
-    call parseMessage
-    mov si, [prefix]
-    mov cx, [prefixLen]
+    call doParse
+    mov si, cmdBuffer
+    mov cx, [cmdBufferLen]
     call logIncoming
     mov cx, 0
     ret

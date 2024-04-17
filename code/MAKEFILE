@@ -1,10 +1,11 @@
 tcpobjs = ARP.OBJ ETH.OBJ ETHTYPE.OBJ IPASM.OBJ IP.OBJ IPTYPE.OBJ PACKET.OBJ TCP.OBJ TCPSOCKM.OBJ TIMER.OBJ TRACE.OBJ UTILS.OBJ
 botobjs = bot.obj state.obj logic.obj log.obj parse.obj
-testobjs = testio.obj
+testioobjs = testio.obj
+testparsobjs = testpars.obj parse.obj
 
 .extensions : .nas
 
-all : bot.exe test.exe
+all : bot.exe testio.exe testpars.exe
 
 clean : .symbolic
   @del /q obj\tcplib
@@ -36,5 +37,8 @@ clean : .symbolic
 bot.exe: $(tcpobjs) $(botobjs)
   wlink name $@ file obj\tcplib\*.obj,obj\bot\*.obj
 
-test.exe: $(tcpobjs) $(testobjs)
-  wlink name $@ file obj\tcplib\*.obj,obj\test\*.obj
+testio.exe: $(tcpobjs) $(testioobjs)
+  wlink name $@ file obj\tcplib\*.obj,obj\test\testio.obj
+
+testpars.exe: $(tcpobjs) $(testparsobjs)
+  wlink name $@ file obj\test\testpars.obj,obj\bot\parse.obj

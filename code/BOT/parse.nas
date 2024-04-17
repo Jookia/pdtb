@@ -6,87 +6,210 @@ GROUP DGROUP CONST2 DATA _BSS
 
 section _TEXT
 
-; <message>  ::= ['@' <tags> SPACE] [':' <prefix> <SPACE> ] <command> <params> <crlf>
-; param can be :<anything><cr><lf>...
-; param can be word1 :<anything><cr><lf>...
-; param can be word1 word2 :<anything><cr><lf>...
-
-; format to print nicely:
-; - prefix
-; - command
+; take in a string
+; fill up the following values:
 ; - param1
 ; - param2
 ; - param3
 ; - param4
 
-; si is string
-; cx is length
-; returns nothing yet
-global parseMessage
+; call convention:
+; - ah,al: input/output regs
+; - bx: len left in read buffer
+; - cx: len left in write buffer
+; - si: read buffer
+; - di: write buffer
+; - cf: whether we 'failed'
+; low level char:
+;   peek: read char to ax, no si increment, check parse len
+;   read: read char to ax, yes si increment, len mod
+;   copy: copy character to read buffer, len mod, check parse len + read len
+; high level:
+;   copyWord: input: max len, returns length of word, set z if overflow
+;   skipSpace: read spaces until no more
+
+; LOW LEVEL STUFF
+
+global peek
+peek:
+    cmp bx, 0
+    jz .error
+    mov al, [si]
+    clc
+    ret
+.error:
+    stc
+    ret
+
+global read
+read:
+    cmp bx, 0
+    jz .error
+    mov al, [si]
+    inc si
+    dec bx
+    clc
+    ret
+.error:
+    stc
+    ret
+
+global copy
+copy:
+    cmp bx, 0
+    jz .error
+    cmp cx, 0
+    jz .error
+    mov al, [si]
+    mov [di], al
+    inc si
+    inc di
+    dec bx
+    dec cx
+    clc
+    ret
+.error:
+    stc
+    ret
+
+; MACROS
+
+%macro do_parse 1
+    call %1
+    jc .return
+%endmacro
+
+%macro do_expect 1
+    cmp al, %1
+    clc
+    jne .return
+%endmacro
+
+%macro do_expect_not 1
+    cmp al, %1
+    clc
+    je .return
+%endmacro
+
+%define do_peek do_parse peek
+%define do_read do_parse read
+%define do_copy do_parse copy
+
+%macro set_parse_buffer 3 ; buf max len
+    mov di, %1
+    mov cx, %2
+    mov [%3], cx
+%endmacro
+
+%macro sub_parse_buffer_len 1 ; max len
+    sub [%1], cx
+%endmacro
+
+; HIGH LEVEL PRIMITIVES
+
+; Copies a possibly empty word until a space
+global copyWord
+copyWord:
+    do_peek
+    do_expect_not ' '
+    do_copy
+    jmp copyWord
+.return:
+    ret
+
+; Skips any spaces
+global skipSpace
+skipSpace:
+    do_peek
+    do_expect ' '
+    do_read
+    jmp skipSpace
+.return:
+    ret
+
+global parseWordIf
+parseWordIf:
+    do_peek
+    cmp al, ah
+    clc
+    jne .return
+    do_read ; Skip the character
+    do_parse copyWord
+    do_parse skipSpace
+.return:
+    ret
+
+; IRC SYNTAX
+
+parseTags:
+    set_parse_buffer tagsBuffer, tagsBufferLenMax, tagsBufferLen
+    mov ah, '@'
+    do_parse parseWordIf
+    sub_parse_buffer_len tagsBufferLen
+.return:
+    ret
+
+parsePrefix:
+    set_parse_buffer prefixBuffer, prefixBufferLenMax, prefixBufferLen
+    mov ah, ':'
+    do_parse parseWordIf
+    sub_parse_buffer_len prefixBufferLen
+.return:
+    ret
+
+parseCmd:
+    set_parse_buffer cmdBuffer, cmdBufferLenMax, cmdBufferLen
+    do_parse copyWord
+    sub_parse_buffer_len cmdBufferLen
+.return:
+    ret
+
 parseMessage:
-    jcxz .return
+    do_parse parseTags
+    do_parse parsePrefix
+    do_parse parseCmd
+    do_parse skipSpace
+    do_read
+    cmp al, 0xd ; \r
+    clc
+    jne .return
+    ret
+.return: ; Only used for errors
+    stc
+    ret
+
+; si: string to parse
+; cx: string length
+; returns cf = set on failure
+global doParse
+doParse:
     push ax
     push bx
-    push si
-    push di
-    push cx
-    mov di, si
-    ; di is the next byte AFTER the string
-    add si, cx
-    call parsePrefix
-    cmp di, si
-    je .return
-.return:
-    pop cx
+    push di ; used for write buffer
+    mov bx, cx ; bx is used for read len
+    call parseMessage
     pop di
-    pop si
     pop bx
     pop ax
     ret
 
-; ax is clobbered
-; bx is clobbered
-; si is string start
-; di is string end
-parsePrefix:
-    cmp byte [di], ':'
-    je .isPrefix
-    mov word [prefixLen], 0
-    ret
-.isPrefix:
-    inc di ; skip ':'
-    ; set prefix
-    mov bx, di
-    mov [prefix], bx
-.skipContent:
-    cmp di, si
-    je .return
-    scasb
-    mov al, byte [di]
-    inc di
-    cmp al, ' '
-    jne .skipContent
-    sub bx, di
-    neg bx
-    dec bx ; we're 1 ahead
-    mov [prefixLen], bx
-.skipSpaces:
-    cmp di, si
-    je .return
-    mov al, byte [di]
-    inc di
-    cmp al, ' '
-    je .skipSpaces
-.return:
-    ret
-
 section CONST2
-
-;authEnv: db "BOT_AUTH",0x00
 
 section _BSS
 
-global prefix
-prefix: resb 4
-global prefixLen
-prefixLen: resb 4
+global tagsBuffer
+global tagsBufferLen
+global prefixBuffer
+global prefixBufferLen
+global cmdBuffer
+global cmdBufferLen
+
+tagsBuffer: resb 32
+tagsBufferLenMax: equ $ - tagsBuffer
+tagsBufferLen: resb 2
+prefixBuffer: resb 32
+prefixBufferLenMax: equ $ - prefixBuffer
+prefixBufferLen: resb 2
+cmdBuffer: resb 8
+cmdBufferLenMax: equ $ - cmdBuffer
+cmdBufferLen: resb 2
