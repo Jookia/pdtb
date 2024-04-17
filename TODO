@@ -1,3 +1,7 @@
+- DNS support for irc.twitch.tv
+- reconnect support
+- better oauth management?
+
 watchdog?
 
 user data SEGMENT
