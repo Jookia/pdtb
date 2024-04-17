@@ -1,5 +1,5 @@
 tcpobjs = ARP.OBJ ETH.OBJ ETHTYPE.OBJ IPASM.OBJ IP.OBJ IPTYPE.OBJ PACKET.OBJ TCP.OBJ TCPSOCKM.OBJ TIMER.OBJ TRACE.OBJ UTILS.OBJ
-botobjs = bot.obj
+botobjs = bot.obj hello.obj
 testobjs = testio.obj
 
 all : bot.exe test.exe

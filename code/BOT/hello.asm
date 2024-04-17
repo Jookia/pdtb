@@ -1,39 +1,59 @@
-section _TEXT class=CODE group=DGROUP
+section _TEXT class=CODE
+section CONST2 class=DATA group=DGROUP
+GROUP DGROUP CONST2
 
 extern currentRecvPacket_ ; uint8_t* currentRecvPacket(void)
 extern recvNewPacket_ ; int recvNewPacket(void)
-extern sendPacket_ ; int sendPacket(uint8_t* packet, int len)
-extern printf_
+extern sendNewBuffer_ ; int sendNewBuffer(uint8_t* packet, int len)
+extern printf_ ; int printf(const char *format, ...)
+
+section _TEXT
 
 global asmRun_
 asmRun_:
+; Entry
+    push ax
+    push bx
+    push cx
+    push dx
     push bp
-.asmLoop:
+    push di
+    push si
+.waitPacket:
     call recvNewPacket_
     cmp ax, 0
-    jz .noNew
+    jz .noMore
+; Get new packet address
     mov dx, ax
     call currentRecvPacket_
+; ax = packet, dx = size
+; Terminate packet for printing
+    mov bx, ax
+    mov si, dx
+    mov [ds:bx+si], byte 0
+; Print packet, preserve registers
     push ax
     push dx
     push printFormat
     call printf_
-    ; ax = buf, dx = len
-    ; call sendPacket_
-    jmp .asmLoop
-.noNew:
+    pop ax
+    pop dx
+    pop ax
+; Send packet back
+    call sendNewBuffer_
+    jmp .waitPacket
+.noMore:
+; Exit
+    pop si
+    pop di
     pop bp
+    pop dx
+    pop cx
+    pop bx
+    pop ax
     mov ax, 0
     ret
 
-printFormat: db "INCOMING (%i): %s",0x0a,0x00
+section CONST2
 
-;copyLoop:
-;  c = *inData
-;  inData++
-;  if c is \n:
-;    print it
-;  *lineBuffer = c
-;  lineBuffer++
-;  if lineBuffer out of range: 
-;    what do?
+printFormat: db "INCOMING (%i): %s",0x0a,0x00
